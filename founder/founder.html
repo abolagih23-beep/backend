@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Founder Dashboard | Super PRO+</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Chart.js for charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- GSAP for animations -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+<style>
+:root{
+  --bg:#0a0f1e;
+  --card:#1e2430;
+  --accent:#facc15;
+  --muted:#94a3b8;
+  --text:#fff;
+  --danger:#ef4444;
+  --lowstock:#f87171;
+}
+body.light{
+  --bg:#f8fafc;
+  --card:#fff;
+  --accent:#f59e0b;
+  --muted:#475569;
+  --text:#0f172a;
+  --danger:#dc2626;
+  --lowstock:#dc2626;
+}
+body{
+  margin:0;
+  font-family:Inter,system-ui;
+  background:var(--bg);
+  color:var(--text);
+  transition:all .3s;
+}
+header{
+  padding:20px;
+  text-align:center;
+  background:var(--card);
+  box-shadow:0 4px 10px rgba(0,0,0,0.3);
+}
+header h1{color:var(--accent);margin:0;font-size:2rem;}
+header p{margin:5px 0;font-size:1.1rem;color:var(--muted);}
+header button{
+  margin-top:10px;
+  padding:10px 16px;
+  border:none;
+  border-radius:6px;
+  background:var(--accent);
+  color:#022c22;
+  cursor:pointer;
+  font-weight:bold;
+  transition:all .2s;
+}
+header button:hover{opacity:.85;}
+
+.container{
+  max-width:1200px;
+  margin:20px auto;
+  padding:0 20px;
+  display:grid;
+  grid-template-columns:1fr 2fr;
+  gap:20px;
+}
+
+.card{
+  background:var(--card);
+  border-radius:14px;
+  padding:20px;
+  box-shadow:0 5px 15px rgba(0,0,0,.2);
+}
+.card h3{
+  margin-top:0;
+  color:var(--accent);
+}
+
+/* Tables */
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+}
+th,td{
+  padding:10px;
+  text-align:left;
+}
+th{background:var(--bg); color:var(--muted);}
+tr{border-bottom:1px solid var(--muted);}
+tr.low-stock td{color:var(--lowstock); font-weight:bold;}
+tr:hover{background:rgba(250,204,21,0.1);}
+
+/* Charts */
+canvas{
+  background:var(--card);
+  border-radius:10px;
+}
+
+/* Toast */
+#toast{
+  position:fixed;
+  top:20px;
+  right:20px;
+  padding:16px 22px;
+  background:var(--accent);
+  color:#022c22;
+  border-radius:8px;
+  box-shadow:0 5px 15px rgba(0,0,0,.3);
+  opacity:0;
+  pointer-events:none;
+  transition:all .5s;
+  z-index:1000;
+}
+
+/* Buttons */
+.button{
+  padding:10px 16px;
+  border:none;
+  border-radius:6px;
+  background:var(--accent);
+  color:#022c22;
+  cursor:pointer;
+  font-weight:bold;
+  margin-top:10px;
+  transition:all .2s;
+}
+.button:hover{opacity:.85;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Founder Dashboard 🚀</h1>
+  <p>Supercalifragilistic PRO+ Control Panel</p>
+  <button onclick="toggleTheme()">Toggle Theme</button>
+  <button class="button" onclick="toggleSystem()">Toggle System Active/Inactive</button>
+  <p id="systemStatus" style="margin-top:5px; font-weight:bold;"></p>
+</header>
+
+<div class="container">
+
+  <!-- Left Column: Low Stock + Charts -->
+  <div>
+    <div class="card">
+      <h3>⚠️ Low Stock Alerts</h3>
+      <ul id="lowStockList" style="list-style:none; padding-left:0; margin:0;"></ul>
+    </div>
+
+    <div class="card">
+      <h3>📊 Sales Trends (Last 20 sales)</h3>
+      <canvas id="salesChart" height="250"></canvas>
+    </div>
+  </div>
+
+  <!-- Right Column: Products & Sales Table -->
+  <div>
+    <div class="card">
+      <h3>🛒 Products Overview</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Qty</th>
+            <th>SP</th>
+            <th>CP</th>
+            <th>Low Stock</th>
+          </tr>
+        </thead>
+        <tbody id="productsTable"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>💰 Recent Sales</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>SP</th>
+            <th>CP</th>
+            <th>Profit</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="salesTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = "/founder";
+let products = [];
+let sales = [];
+let salesChart;
+
+// -------------------- TOAST --------------------
+function showToast(msg, danger=false){
+  const t = document.getElementById("toast");
+  t.innerText = msg;
+  t.style.background = danger ? "var(--danger)" : "var(--accent)";
+  t.style.opacity = 1;
+  setTimeout(()=> t.style.opacity=0, 3000);
+}
+
+// -------------------- THEME --------------------
+function toggleTheme(){ document.body.classList.toggle("light"); }
+
+// -------------------- FETCH DASHBOARD DATA --------------------
+async function loadDashboard(){
+  try{
+    const res = await fetch(`${API}/dashboard-data`);
+    if(!res.ok) throw new Error("Failed to fetch dashboard data");
+    const data = await res.json();
+
+    // System Status
+    document.getElementById("systemStatus").innerText = `System Status: ${data.system_status.toUpperCase()}`;
+
+    // Products
+    products = data.products;
+    const tbody = document.getElementById("productsTable");
+    tbody.innerHTML = "";
+    const lowStockList = document.getElementById("lowStockList");
+    lowStockList.innerHTML = "";
+    products.forEach(p=>{
+      const tr = document.createElement("tr");
+      tr.className = p.low_stock ? "low-stock" : "";
+      tr.innerHTML = `
+        <td>${p.name}</td>
+        <td>${p.quantity}</td>
+        <td>${p.sp}</td>
+        <td>${p.cp}</td>
+        <td>${p.low_stock ? "⚠️" : ""}</td>
+      `;
+      tbody.appendChild(tr);
+
+      if(p.low_stock){
+        const li = document.createElement("li");
+        li.innerText = `${p.name} - ${p.quantity} left`;
+        lowStockList.appendChild(li);
+      }
+    });
+
+    // Sales
+    sales = data.sales;
+    const salesTbody = document.getElementById("salesTable");
+    salesTbody.innerHTML = "";
+    sales.forEach(s=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${s.product_name}</td>
+        <td>${s.quantity}</td>
+        <td>${s.sp}</td>
+        <td>${s.cp}</td>
+        <td>${s.profit}</td>
+        <td>${new Date(s.timestamp).toLocaleString()}</td>
+      `;
+      salesTbody.appendChild(tr);
+    });
+
+    renderSalesChart();
+  } catch(e){
+    console.error(e);
+    showToast("Error loading dashboard", true);
+  }
+}
+
+// -------------------- SALES CHART --------------------
+function renderSalesChart(){
+  const ctx = document.getElementById("salesChart").getContext("2d");
+  const lastSales = sales.slice(0,20).reverse();
+  const labels = lastSales.map(s=>new Date(s.timestamp).toLocaleTimeString());
+  const dataPoints = lastSales.map(s=>s.profit);
+
+  if(salesChart) salesChart.destroy();
+
+  salesChart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: labels,
+      datasets:[{
+        label:'Profit per Sale',
+        data:dataPoints,
+        borderColor:'var(--accent)',
+        backgroundColor:'rgba(250,204,21,0.2)',
+        tension:0.3,
+        fill:true,
+        pointRadius:4
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{display:true}},
+      scales:{
+        y:{beginAtZero:true},
+        x:{title:{display:true,text:'Time'}}
+      }
+    }
+  });
+}
+
+// -------------------- TOGGLE SYSTEM --------------------
+async function toggleSystem(){
+  try{
+    const status = confirm("Do you want to deactivate the system? Press Cancel to activate.");
+    const action = status ? "deactivate" : "activate";
+    const res = await fetch(`${API}/system-toggle`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action})
+    });
+    const data = await res.json();
+    showToast(data.message);
+    loadDashboard();
+  } catch(e){
+    console.error(e);
+    showToast("Failed to toggle system", true);
+  }
+}
+
+// -------------------- INIT --------------------
+loadDashboard();
+setInterval(loadDashboard, 10000); // auto-refresh every 10s
+</script>
+
+</body>
+</html>

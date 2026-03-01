@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin Dashboard | Inventory System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- GSAP for animations -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+<style>
+:root{
+  --bg:#0f172a; --bg-soft:#020617; --card:#111827; --text:#ffffff;
+  --accent:#22c55e; --muted:#94a3b8; --danger:#ef4444; --warning:#facc15;
+}
+body.light{
+  --bg:#f8fafc; --bg-soft:#e5e7eb; --card:#ffffff; --text:#020617; --muted:#475569;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:Inter,system-ui}
+body{background:var(--bg);color:var(--text);display:flex;transition:.2s}
+aside{width:260px;min-height:100vh;background:var(--bg-soft);padding:25px}
+aside h2{color:var(--accent);margin-bottom:30px}
+nav a{display:block;color:var(--muted);text-decoration:none;padding:12px 10px;border-radius:8px;margin-bottom:6px;transition:.2s}
+nav a:hover{background:rgba(34,197,94,.15);color:var(--text)}
+main{flex:1;padding:30px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+header h1{font-size:26px}
+.header-actions{display:flex;gap:10px}
+button{border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:500}
+.toggle{background:var(--card);color:var(--text)}
+.logout{background:var(--danger);color:#fff}
+.filters{margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap}
+.filters button{background:var(--card);color:var(--text);padding:6px 12px;cursor:pointer;transition:.2s}
+.filters button:hover{opacity:.8}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}
+.card{background:var(--card);padding:20px;border-radius:12px;box-shadow:0 8px 25px rgba(0,0,0,.15);text-align:center}
+.card h3{color:var(--muted);font-size:14px}
+.card p{font-size:20px;margin-top:8px;color:var(--accent)}
+.alerts{margin-top:30px}
+.alerts h2{margin-bottom:10px}
+.alert{background:var(--bg-soft);padding:12px;border-left:4px solid var(--danger);border-radius:6px;margin-bottom:6px;font-size:13px}
+.alert.good{border-left-color:var(--accent)}
+.alert.warning{border-left-color:var(--warning)}
+.alert.danger{border-left-color:var(--danger)}
+.history-table{width:100%;margin-top:20px;border-collapse:collapse}
+.history-table th, .history-table td{border:1px solid #333;padding:8px;text-align:center}
+.history-table th{background:var(--card);color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside>
+  <h2>Admin Panel</h2>
+  <nav>
+    <a href="dashboard.html" class="active">📊 Dashboard</a>
+    <a href="products.html">📦 Products</a>
+    <a href="sales.html">💰 Sales</a>
+    <a href="record_sales.html">🧾 Record Sales</a>
+    <a href="staff.html">👥 Staff</a>
+    <a href="alerts.html">🚨 Alerts</a>
+    <a href="reports.html">📈 Reports</a>
+    <a href="settings.html">⚙ Settings</a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<main>
+  <header>
+    <h1>Dashboard Overview</h1>
+    <div class="header-actions">
+      <button class="toggle" onclick="toggleTheme()">🌗 Theme</button>
+      <button class="logout" onclick="logout()">🚪 Logout</button>
+    </div>
+  </header>
+
+  <!-- FILTERS -->
+  <section class="filters">
+    <button onclick="loadDashboard('day')"></button>
+    <button onclick="loadDashboard('week')"></button>
+    <button onclick="loadDashboard('month')"></button>
+    <button onclick="loadDashboard('all')"></button>
+  </section>
+
+  <!-- METRICS -->
+  <section class="cards">
+    <div class="card"><h3>📦 Total Stock remaining(Units)</h3><p id="stock">0</p></div>
+    <div class="card"><h3>💰 Total Investment (Money spent on all goods)</h3><p id="total_investment">₦0</p></div>
+    <div class="card"><h3>💵 Stock Balance (CP*Remaining Qty)</h3><p id="stock_value">₦0</p></div>
+    <div class="card"><h3>📈 Stock Market Value (SP × Remaining Qty)</h3><p id="projected">₦0</p></div>
+    <div class="card"><h3>🛒 Total Sales (Revenue)</h3><p id="sales">₦0</p></div>
+    <div class="card"><h3>🤑 Total Profit</h3><p id="profit">₦0</p></div>
+    <div class="card"><h3>💵 Cash In Hand</h3><p id="cash_in_hand">₦0</p></div>
+    <div class="card"><h3>📅 Daily Sales</h3><p id="daily_sales">₦0</p></div>
+    <div class="card"><h3>📅 Daily Profit</h3><p id="daily_profit">₦0</p></div>
+    <div class="card"><h3>🗓 Weekly Sales</h3><p id="weekly_sales">₦0</p></div>
+    <div class="card"><h3>🗓 Weekly Profit</h3><p id="weekly_profit">₦0</p></div>
+    <div class="card"><h3>🗓️ Monthly Sales</h3><p id="monthly_sales">₦0</p></div>
+    <div class="card"><h3>🗓️ Monthly Profit</h3><p id="monthly_profit">₦0</p></div>
+  </section>
+
+  <!-- ALERTS -->
+  <section class="alerts">
+    <h2></h2>
+    <div id="alertsBox"></div>
+  </section>
+
+  <!-- HISTORICAL SALES -->
+  <section class="history">
+    <h2>Sales History (1 Week)</h2>
+    <table class="history-table">
+      <thead>
+        <tr><th>Date</th><th>Total Sales (₦)</th><th>Total Profit (₦)</th></tr>
+      </thead>
+      <tbody id="historyBody"><tr><td colspan="3">Loading...</td></tr></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const API = "/admin";
+
+// --------------------------
+// LOAD DASHBOARD DATA
+// --------------------------
+async function loadDashboard(period="all"){
+  try {
+    const dashRes = await fetch(`${API}/dashboard`, {credentials:"include"});
+    if(dashRes.status === 401){ 
+      alert("Session expired. Login again."); 
+      window.location.href="../index.html"; 
+      return;
+    }
+    const data = await dashRes.json();
+
+    const prodRes = await fetch(`${API}/products`, {credentials:"include"});
+    const products = await prodRes.json();
+
+    let totalStockUnits=0, stockBalance=0, stockMarketValue=0;
+    products.forEach(p=>{
+      const cp=parseFloat(p.cp)||0, sp=parseFloat(p.sp)||0, qty=parseInt(p.quantity)||0;
+      totalStockUnits+=qty;
+      stockBalance+=cp*qty;
+      stockMarketValue+=sp*qty;
+    });
+
+    document.getElementById("total_investment").innerText=`₦${(data.total_investment||0).toLocaleString()}`;
+    document.getElementById("stock_value").innerText=`₦${stockBalance.toLocaleString()}`;
+    document.getElementById("stock").innerText=totalStockUnits.toLocaleString();
+    document.getElementById("projected").innerText=`₦${stockMarketValue.toLocaleString()}`;
+    document.getElementById("sales").innerText=`₦${(data.total_sales||0).toLocaleString()}`;
+    document.getElementById("profit").innerText=`₦${(data.total_profit||0).toLocaleString()}`;
+    document.getElementById("cash_in_hand").innerText=`₦${(data.cash_in_hand||0).toLocaleString()}`;
+    document.getElementById("daily_sales").innerText=`₦${(data.daily_sales||0).toLocaleString()}`;
+    document.getElementById("daily_profit").innerText=`₦${(data.daily_profit||0).toLocaleString()}`;
+    document.getElementById("weekly_sales").innerText=`₦${(data.weekly_sales||0).toLocaleString()}`;
+    document.getElementById("weekly_profit").innerText=`₦${(data.weekly_profit||0).toLocaleString()}`;
+    document.getElementById("monthly_sales").innerText=`₦${(data.monthly_sales||0).toLocaleString()}`;
+    document.getElementById("monthly_profit").innerText=`₦${(data.monthly_profit||0).toLocaleString()}`;
+
+    const alertsBox=document.getElementById("alertsBox");
+    alertsBox.innerHTML="";
+    (data.low_stock_products||[]).forEach(i=>{
+      const cls=i.quantity<=0?"danger":i.quantity<=5?"warning":"good";
+      const emoji=cls==="danger"?"❌":cls==="warning"?"⚠️":"✅";
+      alertsBox.innerHTML+=`<div class="alert ${cls}">${emoji} ${i.name} (${i.quantity}) left</div>`;
+    });
+
+    const historyBody=document.getElementById("historyBody");
+    historyBody.innerHTML="";
+    (data.weekly_breakdown||[]).forEach(row=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td>${row.date}</td><td>₦${(row.revenue||0).toLocaleString()}</td><td>₦${(row.profit||0).toLocaleString()}</td>`;
+      historyBody.appendChild(tr);
+    });
+
+    gsap.from(".card",{y:30,opacity:0,stagger:0.1,duration:0.5});
+
+  } catch(e){
+    console.error(e);
+    document.getElementById("alertsBox").innerHTML=`<div class="alert danger">❌ Failed to load dashboard</div>`;
+  }
+}
+
+// --------------------------
+// THEME TOGGLE
+// --------------------------
+function toggleTheme(){
+  document.body.classList.toggle("light");
+  localStorage.setItem("theme",document.body.classList.contains("light")?"light":"dark");
+}
+if(localStorage.getItem("theme")==="light") document.body.classList.add("light");
+
+// --------------------------
+// LOGOUT
+// --------------------------
+async function logout(){
+  try{ await fetch(`${API.replace("/admin","/auth")}/logout`,{credentials:"include"}); }
+  catch(e){console.error(e);}
+  window.location.href="../index.html";
+}
+
+// --------------------------
+// INITIAL LOAD
+// --------------------------
+loadDashboard();
+</script>
+
+</body>
+</html>

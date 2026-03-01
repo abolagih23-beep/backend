@@ -1,0 +1,122 @@
+from flask import Blueprint, jsonify, request
+from db import fetch_all
+from utils import get_low_stock, get_fast_moving_items
+
+founder_bp = Blueprint("founder_bp", __name__)
+
+# Internal system status
+SYSTEM_ACTIVE = True
+
+# ------------------------
+# DASHBOARD DATA (for dashboard.html)
+# ------------------------
+@founder_bp.route("/dashboard-data", methods=["GET"])
+def dashboard_data():
+    global SYSTEM_ACTIVE
+
+    # Products
+    products_rows = fetch_all("SELECT id, name, cp, sp, quantity FROM products ORDER BY name")
+    products = []
+    for p in products_rows:
+        products.append({
+            "id": p["id"],
+            "name": p["name"],
+            "cp": float(p["cp"]),
+            "sp": float(p["sp"]),
+            "quantity": int(p["quantity"]),
+            "low_stock": int(p["quantity"]) < 7
+        })
+
+    # Last 50 sales
+    sales_rows = fetch_all("""
+        SELECT s.id, s.timestamp, s.quantity, s.staff_id, 
+               p.name AS product_name, p.cp, p.sp
+        FROM sales s
+        JOIN products p ON s.product_id = p.id
+        ORDER BY s.timestamp DESC
+        LIMIT 50
+    """)
+    sales = []
+    for s in sales_rows:
+        sales.append({
+            "id": s["id"],
+            "timestamp": s["timestamp"].isoformat() if hasattr(s["timestamp"], "isoformat") else str(s["timestamp"]),
+            "quantity": int(s["quantity"]),
+            "staff_id": s["staff_id"],
+            "product_name": s["product_name"],
+            "cp": float(s["cp"]),
+            "sp": float(s["sp"]),
+            "profit": round((float(s["sp"]) - float(s["cp"])) * int(s["quantity"]), 2)
+        })
+
+    # Activities (recent)
+    activities_rows = fetch_all("""
+        SELECT s.timestamp, u.name AS actor, 'sold' AS action, p.name AS target, s.quantity
+        FROM sales s
+        JOIN products p ON s.product_id = p.id
+        LEFT JOIN users u ON s.staff_id = u.id
+        ORDER BY s.timestamp DESC
+        LIMIT 50
+    """)
+    activities = []
+    for a in activities_rows:
+        activities.append({
+            "timestamp": a["timestamp"].isoformat() if hasattr(a["timestamp"], "isoformat") else str(a["timestamp"]),
+            "actor": a["actor"] or "Admin",
+            "action": a["action"],
+            "target": f"{a['target']} x {a['quantity']}"
+        })
+
+    # Alerts
+    low_stock = get_low_stock()       # Should return list of dicts {name, quantity}
+    fast_moving = get_fast_moving_items()  # Should return list of dicts {name, sold_qty}
+
+    return jsonify({
+        "system_status": "active" if SYSTEM_ACTIVE else "inactive",
+        "products": products,
+        "sales": sales,
+        "activities": activities,
+        "low_stock": low_stock,
+        "fast_moving": fast_moving
+    })
+
+
+# ------------------------
+# SYSTEM TOGGLE
+# ------------------------
+@founder_bp.route("/system-toggle", methods=["POST"])
+def toggle_system():
+    global SYSTEM_ACTIVE
+    data = request.json or {}
+    action = data.get("action")
+    if action not in ["activate", "deactivate"]:
+        return jsonify({"error":"Invalid action"}), 400
+    SYSTEM_ACTIVE = True if action=="activate" else False
+    return jsonify({"status":"success", "message":f"System now {'ACTIVE' if SYSTEM_ACTIVE else 'INACTIVE'}"})
+
+
+# ------------------------
+# HISTORY DATA (for charts)
+# ------------------------
+@founder_bp.route("/history", methods=["GET"])
+def sales_history():
+    """
+    Returns aggregated sales & profit over time for charts
+    """
+    rows = fetch_all("""
+        SELECT DATE(s.timestamp) AS date,
+               COALESCE(SUM(p.sp * s.quantity),0) AS sales,
+               COALESCE(SUM((p.sp - p.cp) * s.quantity),0) AS profit
+        FROM sales s
+        JOIN products p ON s.product_id = p.id
+        GROUP BY date
+        ORDER BY date ASC
+    """)
+    history = []
+    for r in rows:
+        history.append({
+            "date": str(r["date"]),
+            "sales": float(r["sales"]),
+            "profit": float(r["profit"])
+        })
+    return jsonify(history)

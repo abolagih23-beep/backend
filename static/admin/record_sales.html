@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>POS Sales | Admin & Staff</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+<style>
+:root{
+  --bg:#020617; --card:#111827; --accent:#22c55e; --muted:#94a3b8; --danger:#ef4444; --text:#fff;
+}
+body.light{
+  --bg:#f1f5f9; --card:#fff; --accent:#16a34a; --muted:#475569; --text:#0f172a; --danger:#dc2626;
+}
+*{box-sizing:border-box;font-family:Inter,system-ui;}
+body{margin:0;display:flex;background:var(--bg);color:var(--text);transition:.3s;}
+aside{width:240px;min-height:100vh;background:var(--card);padding:25px;}
+aside h2{color:var(--accent);margin-bottom:30px;}
+nav a{display:block;padding:12px;text-decoration:none;color:var(--muted);border-radius:8px;margin-bottom:6px;transition:.3s;}
+nav a:hover,nav a.active{background:var(--bg);color:var(--text);}
+main{flex:1;padding:30px;}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;}
+button{padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;}
+.btn-primary{background:var(--accent);color:#022c22;}
+.btn-danger{background:var(--danger);color:#fff;}
+.form-card,.cart-card,.table-card{background:var(--card);padding:20px;border-radius:14px;margin-bottom:20px;}
+.form-grid{display:flex;gap:15px;flex-wrap:wrap;}
+select,input{padding:10px 14px;border-radius:8px;border:1px solid #94a3b8;background:var(--bg);color:var(--text);flex:1;min-width:150px;}
+table{width:100%;border-collapse:collapse;}
+th,td{padding:12px;text-align:left;}
+th{background:var(--bg);color:var(--muted);font-size:13px;}
+tr{border-bottom:1px solid #334155;}
+tr:hover{background:var(--bg);}
+#toast{position:fixed;top:20px;right:20px;padding:16px 22px;border-radius:8px;color:#fff;opacity:0;transition:.4s;z-index:1000;}
+</style>
+</head>
+<body>
+
+<aside>
+<h2>🛒 Panel</h2>
+<nav>
+<a href="dashboard.html">📊 Dashboard</a>
+<a href="products.html">📦 Products</a>
+<a class="active" href="pos-sales.html">💰 Record Sale</a>
+<a href="sales.html">🧾 Sales</a>
+<a href="staff.html">👥 Staff</a>
+<a href="reports.html">📈 Reports</a>
+<a href="settings.html">⚙ Settings</a>
+</nav>
+<br>
+<button onclick="toggleTheme()">Toggle Theme</button>
+</aside>
+
+<main>
+<header><h1>POS Multi-Item Sale</h1></header>
+
+<div class="form-card">
+<h3>Add Product</h3>
+<input type="text" id="searchInput" placeholder="Search product...">
+<div class="form-grid">
+<select id="productSelect"><option>Loading...</option></select>
+<input type="number" id="quantity" placeholder="Quantity">
+<select id="staffSelect" style="display:none;"></select>
+</div>
+<br>
+<button class="btn-primary" onclick="addToCart()">Add to Cart</button>
+</div>
+
+<div class="cart-card">
+<h3>Cart</h3>
+<table>
+<thead>
+<tr>
+<th>Product</th>
+<th>Qty</th>
+<th>SP (₦)</th>
+<th>Total (₦)</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody id="cartTable"></tbody>
+</table>
+<br>
+<button class="btn-primary" onclick="checkoutCart(false)">Record Only</button>
+<button class="btn-primary" onclick="checkoutCart(true)">Checkout & Print</button>
+</div>
+
+<div class="table-card">
+<h3>Sales History</h3>
+<table>
+<thead>
+<tr>
+<th>Product</th>
+<th>Qty</th>
+<th>SP</th>
+<th>Total</th>
+<th>Date</th>
+<th>Staff</th>
+</tr>
+</thead>
+<tbody id="salesTable"></tbody>
+</table>
+</div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const API="http://127.0.0.1:5000";
+let role="",endpoints={},allProducts=[],cart=[];
+
+// TOAST
+function showToast(msg,danger=false){
+  const t=document.getElementById("toast");
+  t.innerText=msg;
+  t.style.background=danger?"#ef4444":"#16a34a";
+  t.style.opacity=1;
+  setTimeout(()=>t.style.opacity=0,3000);
+}
+
+// SESSION
+async function initSession(){
+  try{
+    const res=await fetch(`${API}/auth/session`,{credentials:"include"});
+    if(!res.ok){showToast("Session expired",true);return;}
+    const data=await res.json();
+    role=data.role;
+
+    if(role==="admin"){
+      endpoints.products=`${API}/admin/products`;
+      endpoints.sales=`${API}/admin/sales`;
+      endpoints.history=`${API}/admin/sales`;
+      endpoints.staff=`${API}/admin/staff`;
+      document.getElementById("staffSelect").style.display="block";
+      await loadStaff();
+    }else{
+      endpoints.products=`${API}/staff/products`;
+      endpoints.sales=`${API}/staff/sales`;
+      endpoints.history=`${API}/staff/sales/history`;
+    }
+
+    await loadProducts();
+    await loadSales();
+  }catch(e){showToast("",true);}
+}
+
+// LOAD PRODUCTS
+async function loadProducts(){
+  const res=await fetch(endpoints.products,{credentials:"include"});
+  const data=await res.json();
+  allProducts=data;
+  renderProducts(data);
+}
+
+function renderProducts(products){
+  const select=document.getElementById("productSelect");
+  select.innerHTML=`<option value="">Select Product</option>`;
+  products.forEach(p=>{select.innerHTML+=`<option value="${p.id}">${p.name} (Stock: ${p.quantity})</option>`;});
+}
+
+// LOAD STAFF
+async function loadStaff(){
+  const res=await fetch(endpoints.staff,{credentials:"include"});
+  const data=await res.json();
+  const select=document.getElementById("staffSelect");
+  select.innerHTML=`<option value="">Assign Staff</option>`;
+  data.forEach(s=>{select.innerHTML+=`<option value="${s.id}">${s.name}</option>`;});
+}
+
+// SEARCH
+document.getElementById("searchInput").addEventListener("input",e=>{
+  const term=e.target.value.toLowerCase();
+  renderProducts(allProducts.filter(p=>p.name.toLowerCase().includes(term)));
+});
+
+// CART
+function addToCart(){
+  const id=document.getElementById("productSelect").value;
+  const qty=parseInt(document.getElementById("quantity").value);
+  if(!id||!qty){showToast("Select product & qty",true);return;}
+  const product=allProducts.find(p=>p.id==id);
+  if(qty>product.quantity){showToast("Insufficient stock",true);return;}
+  const exist=cart.find(c=>c.product_id==id);
+  if(exist){exist.quantity+=qty;if(exist.quantity>product.quantity){exist.quantity=product.quantity;showToast("Qty adjusted to stock",true);}} 
+  else{cart.push({product_id:id,name:product.name,sp:product.sp,quantity:qty});}
+  renderCart();
+}
+
+function renderCart(){
+  const tbody=document.getElementById("cartTable");
+  tbody.innerHTML="";
+  if(cart.length===0){tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;opacity:.6">Cart empty</td></tr>`;return;}
+  cart.forEach((item,index)=>{
+    const subtotal=item.sp*item.quantity;
+    tbody.innerHTML+=`<tr><td>${item.name}</td><td>${item.quantity}</td><td>₦${item.sp.toLocaleString()}</td><td>₦${subtotal.toLocaleString()}</td><td><button onclick="removeCart(${index})">❌</button></td></tr>`;
+  });
+}
+
+function removeCart(i){cart.splice(i,1);renderCart();}
+
+// CHECKOUT with option to print
+async function checkoutCart(print=false){
+  if(cart.length===0){showToast("Cart empty!",true);return;}
+  const payload={cart:cart.map(i=>({product_id:parseInt(i.product_id),quantity:parseInt(i.quantity)}))};
+  try{
+    const res=await fetch(endpoints.sales,{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify(payload)});
+    if(!res.ok){showToast("Failed to record sale",true);return;}
+    if(print){printReceipt(cart.map(i=>({...i,total:i.sp*i.quantity})));} // print if requested
+    cart=[];renderCart();await loadProducts();await loadSales();
+  }catch(e){showToast("Backend error!",true);}
+}
+
+// PRINT RECEIPT
+function printReceipt(items){
+  let total=0;
+  const now=new Date();
+  const options={weekday:'long',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'};
+  const dateStr=now.toLocaleDateString(undefined,options);
+
+  let html=`<div style="font-family:monospace;width:320px;padding:10px;">
+  <div style="text-align:center;">
+    
+    <h2 style="margin:5px 0;">🛒 Ceemark Pharmacy </h2>
+    <p style="margin:2px 0;font-size:12px;">📍64, Itoki Road Orija Bus Stop, Ogun State.</p>
+    <p style="margin:2px 0;font-size:12px;">📅 ${dateStr}</p>
+  </div>
+  <hr>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead><tr style="border-bottom:1px solid #000;text-align:left;">
+    <th style="padding:4px;">Product</th><th style="padding:4px;text-align:center;">Qty</th>
+    <th style="padding:4px;text-align:right;">Unit ₦</th><th style="padding:4px;text-align:right;">Total ₦</th>
+  </tr></thead><tbody>`;
+
+  items.forEach((i,index)=>{
+    const bg=index%2===0?'#f2f2f2':'#fff';
+    total+=i.total;
+    html+=`<tr style="background:${bg};border-bottom:1px solid #ccc;">
+      <td style="padding:4px;">${i.name}</td>
+      <td style="padding:4px;text-align:center;">${i.quantity}</td>
+      <td style="padding:4px;text-align:right;">₦${i.sp.toLocaleString()}</td>
+      <td style="padding:4px;text-align:right;">₦${i.total.toLocaleString()}</td>
+    </tr>`;
+  });
+
+  html+=`</tbody></table><hr>
+  <h3 style="text-align:right;margin:5px 0;">💰 Total: ₦${total.toLocaleString()}</h3>
+  <p style="text-align:center;font-size:14px;margin-top:10px;">🙏 Thank you for shopping! Please come again 😊 Contact: 08131275577, 08025614486.</p></div>`;
+
+  // Try to print silently if printer available, otherwise open preview
+  if (navigator.userAgent.includes("Chrome") || navigator.userAgent.includes("Edge")) {
+    const printWindow = window.open("","_blank","width=400,height=600");
+    printWindow.document.write(`<html><body onload="window.print();window.close();">${html}</body></html>`);
+    printWindow.document.close();
+  } else {
+    // fallback for other browsers
+    const w = window.open("", "Print","width=400,height=600");
+    w.document.write(`<html><body onload="window.print();window.close();">${html}</body></html>`);
+    w.document.close();
+  }
+}
+
+// LOAD SALES
+async function loadSales(){
+  const res=await fetch(endpoints.history,{credentials:"include"});
+  if(!res.ok) return;
+  const data=await res.json();
+  const tbody=document.getElementById("salesTable");
+  tbody.innerHTML="";
+  data.forEach(s=>{
+    const total=s.sp*s.quantity;
+    tbody.innerHTML+=`<tr>
+      <td>${s.product_name}</td>
+      <td>${s.quantity}</td>
+      <td>₦${s.sp.toLocaleString()}</td>
+      <td>₦${total.toLocaleString()}</td>
+      <td>${new Date(s.timestamp).toLocaleString()}</td>
+      <td>${s.staff_name||"-"}</td>
+    </tr>`;
+  });
+  gsap.from("#salesTable tr",{y:20,opacity:0,stagger:0.05});
+}
+
+// THEME
+function toggleTheme(){document.body.classList.toggle("light");}
+
+// INIT
+initSession();
+</script>
+
+</body>
+</html>

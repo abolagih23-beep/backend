@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>All Sales | Admin Panel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- GSAP for animations -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+<style>
+:root{
+  --bg:#020617;
+  --card:#111827;
+  --accent:#22c55e;
+  --muted:#94a3b8;
+  --danger:#ef4444;
+  --info:#38bdf8;
+  --text:#fff;
+}
+body.light{
+  --bg:#f1f5f9;
+  --card:#fff;
+  --accent:#22c55e;
+  --muted:#475569;
+  --text:#0f172a;
+  --danger:#ef4444;
+  --info:#0284c7;
+}
+*{box-sizing:border-box;font-family:Inter,system-ui}
+body{ margin:0; display:flex; background:var(--bg); color:var(--text); transition: all 0.3s; }
+aside{ width:260px; min-height:100vh; background:var(--card); padding:25px; transition: all 0.3s; }
+aside h2{ color:var(--accent); margin-bottom:30px; }
+nav a{ display:block; color:var(--muted); text-decoration:none; padding:12px; border-radius:8px; margin-bottom:6px; transition:.3s; }
+nav a:hover, nav a.active{ background:var(--bg); color:var(--text); }
+main{ flex:1; padding:30px; }
+header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:25px; }
+button{ padding:10px 16px; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
+.btn-primary{background:var(--accent);color:#022c22}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-info{background:var(--info);color:#fff}
+#search{ width:100%; padding:10px 14px; margin-bottom:15px; border-radius:8px; border:1px solid #94a3b8; background:var(--bg); color:var(--text); }
+.table-card{ background:var(--card); border-radius:14px; overflow-x:auto; margin-bottom:30px; }
+table{ width:100%; border-collapse:collapse; min-width:900px; }
+th,td{ padding:14px; text-align:left; }
+th{ background:var(--bg); color:var(--muted); font-size:13px; }
+tr{ border-bottom:1px solid #94a3b8; }
+tr:hover{ background:var(--bg); }
+td button{ margin-right:5px; }
+#toast{ position:fixed; top:20px; right:20px; padding:16px 22px; background:var(--accent); color:#022c22; border-radius:8px; box-shadow:0 5px 15px rgba(0,0,0,.3); opacity:0; pointer-events:none; transition:all .5s; z-index:1000; }
+</style>
+</head>
+<body>
+
+<aside>
+  <h2>Admin Panel</h2>
+  <nav>
+    <a href="dashboard.html">📊 Dashboard</a>
+    <a href="products.html">📦 Products</a>
+    <a href="sales.html" class="active">💰 Sales</a>
+    <a href="staff.html">👥 Staff</a>
+    <a href="record_sales.html">🧾 Record Sales</a>
+    <a href="reports.html">📈 Reports</a>
+    <a href="settings.html">⚙ Settings</a>
+  </nav>
+  <br>
+  <button onclick="toggleTheme()">Toggle Theme</button>
+</aside>
+
+<main>
+<header><h1>All Sales Records</h1></header>
+<input id="search" placeholder="Search by product, staff, or date" onkeyup="filterSales()">
+
+<div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>Quantity</th>
+        <th>SP (₦)</th>
+        <th>Total Value (₦)</th>
+        <th>Profit (₦)</th>
+        <th>Sold By</th>
+        <th>Date</th>
+        <th>Time</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="salesTable"></tbody>
+  </table>
+</div>
+
+<div id="toast"></div>
+</main>
+
+<script>
+// ✅ DYNAMIC API BASE (matches host automatically)
+const API = `${window.location.protocol}//${window.location.host}/admin`;
+let salesCache = [];
+
+function showToast(message, type="success"){
+  const t = document.getElementById("toast");
+  t.innerText = message;
+  t.style.background = type==="error" ? "var(--danger)" : "var(--accent)";
+  t.style.color = type==="error" ? "#fff" : "#022c22";
+  t.style.opacity = 1;
+  setTimeout(()=>{ t.style.opacity=0; }, 3000);
+}
+
+/* LOAD ALL SALES (Admin) */
+async function loadSales(){
+  try{
+    const res = await fetch(`${API}/sales`, { credentials:"include" });
+    if(res.status===401){ location.href="../index.html"; return; }
+    const data = await res.json();
+    salesCache = data;
+    if(salesCache.length===0) showToast("No sales recorded yet.");
+    renderTable(data);
+  }catch(e){
+    showToast("Error loading sales", "error");
+    console.error(e);
+  }
+}
+
+/* DELETE SALE */
+async function deleteSale(id){
+  if(!confirm(`Delete sale ID ${id}? This will restore stock.`)) return;
+  try{
+    const res = await fetch(`${API}/sales/${id}`, {
+      method:"DELETE",
+      credentials:"include"
+    });
+    const data = await res.json();
+    if(res.ok){
+      showToast(data.message);
+      salesCache = salesCache.filter(s=>s.id!==id);
+      renderTable(salesCache);
+    } else {
+      showToast(data.error || "Failed to delete sale", "error");
+    }
+  }catch(e){
+    showToast("Error deleting sale", "error");
+    console.error(e);
+  }
+}
+
+/* RENDER TABLE */
+function renderTable(data){
+  const table = document.getElementById("salesTable");
+  table.innerHTML = "";
+  data.forEach(s=>{
+    const totalValue = Number(s.sp)*Number(s.quantity);
+    const profit = (Number(s.sp)-Number(s.cp))*Number(s.quantity);
+    const dateObj = new Date(s.timestamp);
+    const date = dateObj.toLocaleDateString();
+    const time = dateObj.toLocaleTimeString();
+    table.innerHTML += `
+      <tr>
+        <td>${s.product_name}</td>
+        <td>${s.quantity}</td>
+        <td>₦${Number(s.sp).toLocaleString()}</td>
+        <td>₦${totalValue.toLocaleString()}</td>
+        <td>₦${profit.toLocaleString()}</td>
+        <td>${s.staff_name || 'Admin'}</td>
+        <td>${date}</td>
+        <td>${time}</td>
+        <td>
+          <button class="btn-danger" onclick="deleteSale(${s.id})">Delete</button>
+        </td>
+      </tr>`;
+  });
+  gsap.from("tbody tr",{opacity:0,y:20,stagger:.04});
+}
+
+/* SEARCH FILTER */
+function filterSales(){
+  const term = document.getElementById("search").value.toLowerCase();
+  const filtered = salesCache.filter(s=>
+    (s.product_name && s.product_name.toLowerCase().includes(term)) ||
+    (s.staff_name && s.staff_name.toLowerCase().includes(term)) ||
+    (s.timestamp && new Date(s.timestamp).toLocaleDateString().includes(term))
+  );
+  renderTable(filtered);
+}
+
+/* THEME TOGGLE */
+function toggleTheme(){ document.body.classList.toggle("light"); }
+
+/* INITIAL LOAD */
+loadSales();
+</script>
+</body>
+</html>

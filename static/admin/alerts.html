@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Inventory Alerts | Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- GSAP -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+<style>
+:root{
+  --bg:#0f172a; --card:#111827; --accent:#22c55e; --muted:#94a3b8;
+  --danger:#ef4444; --warning:#facc15; --text:#fff;
+}
+body.light{
+  --bg:#f8fafc; --card:#fff; --accent:#22c55e; --muted:#475569; --text:#020617;
+}
+body{
+  margin:0;
+  font-family:Inter,system-ui;
+  background:var(--bg);
+  color:var(--text);
+  display:flex;
+  transition:.3s;
+  min-height:100vh;
+}
+
+/* SIDEBAR */
+aside{
+  width:260px;
+  min-height:100vh;
+  background:var(--card);
+  padding:25px;
+  position:fixed;
+  top:0;
+  left:0;
+  z-index:10;
+}
+aside h2{
+  color:var(--accent);
+  margin-bottom:30px;
+  font-size:22px;
+}
+nav a{
+  display:block;
+  color:var(--muted);
+  text-decoration:none;
+  padding:12px 10px;
+  border-radius:8px;
+  margin-bottom:6px;
+  transition:.2s;
+}
+nav a:hover{
+  background:rgba(34,197,94,.15);
+  color:var(--text);
+}
+
+/* MAIN CONTENT */
+main{
+  flex:1;
+  padding:30px;
+  margin-left:260px;
+}
+
+/* HEADER */
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:20px;
+}
+header h1{
+  color:var(--accent);
+  margin:0;
+}
+header .header-actions{
+  display:flex;
+  gap:10px;
+}
+header button{
+  border:none;
+  padding:8px 14px;
+  border-radius:6px;
+  cursor:pointer;
+  font-weight:500;
+}
+header .toggle{
+  background:var(--card);
+  color:var(--text);
+}
+header .logout{
+  background:var(--danger);
+  color:#fff;
+}
+
+/* CONTAINERS AND CARDS */
+.container{
+  max-width:1100px;
+  margin:0 auto;
+  padding:20px;
+}
+.card{
+  background:var(--card);
+  padding:20px;
+  border-radius:14px;
+  margin-bottom:20px;
+  overflow-x:auto;
+}
+.card h3{
+  margin-top:0;
+  color:var(--accent);
+}
+
+/* TABLES */
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:15px;
+}
+th,td{
+  padding:12px;
+  text-align:left;
+}
+th{
+  background:var(--bg);
+  color:var(--muted);
+  cursor:pointer;
+  user-select:none;
+}
+tr{
+  border-bottom:1px solid var(--muted);
+}
+tr:hover{
+  background:rgba(34,197,94,0.1);
+}
+input[type=search]{
+  padding:10px 14px;
+  border-radius:8px;
+  border:1px solid var(--muted);
+  width:100%;
+  margin-bottom:15px;
+  background:var(--bg);
+  color:var(--text);
+}
+
+/* HIGHLIGHT ROWS */
+.highlight-danger{background:var(--danger);color:#fff;font-weight:bold;}
+.highlight-accent{background:var(--accent);color:#022c22;font-weight:bold;}
+
+/* TOAST */
+#toast{
+  position:fixed;
+  top:20px;
+  right:20px;
+  padding:16px 22px;
+  background:var(--accent);
+  color:#022c22;
+  border-radius:8px;
+  box-shadow:0 5px 15px rgba(0,0,0,.3);
+  opacity:0;
+  pointer-events:none;
+  transition:all .5s;
+  z-index:1000;
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside>
+  <h2>Admin Panel</h2>
+  <nav>
+    <a href="dashboard.html">📊 Dashboard</a>
+    <a href="products.html">📦 Products</a>
+    <a href="sales.html">💰 Sales</a>
+    <a href="record_sales.html">🧾 Record Sales</a>
+    <a href="staff.html">👥 Staff</a>
+    <a href="alerts.html">🚨 Alerts</a>
+    <a href="reports.html">📈 Reports</a>
+    <a href="settings.html">⚙ Settings</a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<main>
+<header>
+  <h1>Inventory Alerts</h1>
+  <div class="header-actions">
+    <button class="toggle" onclick="toggleTheme()">🌗 Theme</button>
+    <button class="logout" onclick="logout()">🚪 Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Low Stock -->
+  <div class="card">
+    <h3>⚠️ Low Stock Products (&lt;5 units)</h3>
+    <input type="search" id="lowStockSearch" placeholder="Search low stock items...">
+    <table>
+      <thead>
+        <tr>
+          <th onclick="sortTable('lowStockTable',0)">Product Name ▲▼</th>
+          <th onclick="sortTable('lowStockTable',1)">Quantity Left ▲▼</th>
+        </tr>
+      </thead>
+      <tbody id="lowStockTable">
+        <tr><td colspan="2" style="text-align:center;opacity:.6;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Fast Moving -->
+  <div class="card">
+    <h3>🔥 Fast Moving Products (&lt;20 units)</h3>
+    <input type="search" id="fastMovingSearch" placeholder="Search fast moving items...">
+    <table>
+      <thead>
+        <tr>
+          <th onclick="sortTable('fastMovingTable',0)">Product Name ▲▼</th>
+          <th onclick="sortTable('fastMovingTable',1)">Sold Quantity ▲▼</th>
+        </tr>
+      </thead>
+      <tbody id="fastMovingTable">
+        <tr><td colspan="2" style="text-align:center;opacity:.6;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = "/admin";
+let alertsData = {low_stock_products: [], fast_moving_products: []};
+let knownLowStock = new Set();
+let knownFastMoving = new Set();
+
+// ---------- TOAST ----------
+function showToast(msg, danger=false){
+  const t=document.getElementById("toast");
+  t.innerText=msg;
+  t.style.background=danger?"var(--danger)":"var(--accent)";
+  t.style.opacity=1;
+  setTimeout(()=>t.style.opacity=0,3000);
+}
+
+// ---------- THEME ----------
+function toggleTheme(){ 
+  document.body.classList.toggle("light"); 
+  localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark");
+}
+if(localStorage.getItem("theme")==="light") document.body.classList.add("light");
+
+// ---------- FETCH ALERTS ----------
+async function loadAlerts(){
+  try{
+    const res = await fetch(`${API}/dashboard`, { credentials:"include" });
+    if(!res.ok){ showToast("Failed to load alerts", true); return; }
+    const data = await res.json();
+    alertsData = data;
+
+    renderLowStock();
+    renderFastMoving();
+
+  } catch(e){ showToast("Error loading alerts", true); console.error(e); }
+}
+
+// ---------- RENDER LOW STOCK ----------
+function renderLowStock(){
+  const tbody = document.getElementById("lowStockTable");
+  const filter = document.getElementById("lowStockSearch").value.toLowerCase();
+  const items = (alertsData.low_stock_products || []).filter(i => i.name.toLowerCase().includes(filter));
+  tbody.innerHTML = items.length ? "" : `<tr><td colspan="2" style="text-align:center;opacity:.6">No items</td></tr>`;
+
+  items.forEach(i=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i.name}</td><td>${i.quantity}</td>`;
+    if(i.quantity < 7) tr.classList.add("highlight-danger");
+
+    if(!knownLowStock.has(i.id)){
+      knownLowStock.add(i.id);
+      showToast(`New low stock: ${i.name} (${i.quantity})`, i.quantity < 7);
+    }
+
+    tbody.appendChild(tr);
+    gsap.from(tr,{y:20,opacity:0,duration:.5});
+  });
+}
+
+// ---------- RENDER FAST MOVING ----------
+function renderFastMoving(){
+  const tbody = document.getElementById("fastMovingTable");
+  const filter = document.getElementById("fastMovingSearch").value.toLowerCase();
+  const items = (alertsData.fast_moving_products || []).filter(i => (i.name||`ID ${i.id}`).toLowerCase().includes(filter));
+  tbody.innerHTML = items.length ? "" : `<tr><td colspan="2" style="text-align:center;opacity:.6">No items</td></tr>`;
+
+  items.forEach(i=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i.name || 'Product '+i.id}</td><td>${i.sold_qty}</td>`;
+    if(i.sold_qty > 5) tr.classList.add("highlight-accent");
+
+    if(!knownFastMoving.has(i.id)){
+      knownFastMoving.add(i.id);
+      showToast(`New fast moving: ${i.name || 'Product '+i.id} (${i.sold_qty})`);
+    }
+
+    tbody.appendChild(tr);
+    gsap.from(tr,{y:20,opacity:0,duration:.5});
+  });
+}
+
+// ---------- SEARCH FILTER ----------
+document.getElementById("lowStockSearch").addEventListener("input", renderLowStock);
+document.getElementById("fastMovingSearch").addEventListener("input", renderFastMoving);
+
+// ---------- SORT FUNCTION ----------
+function sortTable(tableId, colIndex){
+  const table = document.getElementById(tableId);
+  const rows = Array.from(table.querySelectorAll("tr")).filter(r=>r.querySelectorAll("td").length);
+  let asc = table.asc = !(table.asc);
+  rows.sort((a,b)=>{
+    let x = a.children[colIndex].innerText.toLowerCase();
+    let y = b.children[colIndex].innerText.toLowerCase();
+    return (x > y ? 1 : x < y ? -1 : 0) * (asc?1:-1);
+  });
+  rows.forEach(r=>table.appendChild(r));
+}
+
+// ---------- LIVE REFRESH ----------
+setInterval(loadAlerts, 10000);
+loadAlerts();
+
+// ---------- LOGOUT ----------
+async function logout() {
+  try{
+    await fetch(`/auth/logout`, {credentials:"include"});
+  } catch(e){ console.error(e); }
+  window.location.href="../index.html";
+}
+</script>
+
+</body>
+</html>

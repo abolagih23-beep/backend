@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Founder Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { font-family: Arial, sans-serif; background: #f5f5f5; margin:0; padding:20px; }
+h1,h2,h3 { margin:10px 0; }
+section { background:#fff; padding:15px; margin-bottom:20px; border-radius:8px; box-shadow:0 0 8px rgba(0,0,0,0.1); }
+table { width:100%; border-collapse: collapse; margin-top:10px; }
+table, th, td { border:1px solid #ddd; }
+th, td { padding:8px; text-align:left; }
+th { background:#f0f0f0; }
+button { padding:8px 12px; margin-right:5px; cursor:pointer; border:none; border-radius:4px; }
+button.toggle { background:#28a745; color:#fff; }
+button.off { background:#dc3545; color:#fff; }
+button.restart { background:#ffc107; color:#000; }
+button.shutdown { background:#6c757d; color:#fff; }
+.alert { padding:5px 10px; border-radius:4px; display:inline-block; margin:2px; }
+.alert.low { background:#dc3545; color:#fff; }
+.alert.fast { background:#ffc107; color:#000; }
+.status { font-weight:bold; }
+</style>
+</head>
+<body>
+<h1>Founder Dashboard</h1>
+
+<section id="metrics-section">
+<h2>Metrics</h2>
+<p>Total Stock: <span id="total-stock">--</span></p>
+<p>Total Investment: ₦<span id="total-investment">--</span></p>
+<p>Projected Revenue: ₦<span id="projected-revenue">--</span></p>
+<p>Total Profit: ₦<span id="total-profit">--</span></p>
+</section>
+
+<section id="alerts-section">
+<h2>Alerts</h2>
+<div>
+<h3>Fast Moving Products</h3>
+<div id="fast-moving"></div>
+<h3>Low Stock Products</h3>
+<div id="low-stock"></div>
+</div>
+</section>
+
+<section id="products-section">
+<h2>Products</h2>
+<table>
+<thead>
+<tr><th>ID</th><th>Name</th><th>Category</th><th>CP</th><th>SP</th><th>Quantity</th></tr>
+</thead>
+<tbody id="products-table"></tbody>
+</table>
+</section>
+
+<section id="sales-section">
+<h2>Sales (Latest 500)</h2>
+<table>
+<thead>
+<tr><th>ID</th><th>Product</th><th>Quantity</th><th>CP</th><th>SP</th><th>Profit</th><th>Staff</th><th>Timestamp</th></tr>
+</thead>
+<tbody id="sales-table"></tbody>
+</table>
+</section>
+
+<section id="staff-section">
+<h2>Staff</h2>
+<table>
+<thead>
+<tr><th>ID</th><th>Name</th><th>Role</th></tr>
+</thead>
+<tbody id="staff-table"></tbody>
+</table>
+</section>
+
+<section id="system-section">
+<h2>System Control</h2>
+<p>System Status: <span class="status" id="system-status">--</span></p>
+<button class="toggle" id="toggle-on">Turn ON</button>
+<button class="off" id="toggle-off">Turn OFF</button>
+<button class="restart" id="restart">Restart</button>
+<button class="shutdown" id="shutdown">Shutdown</button>
+</section>
+
+<script>
+async function fetchDashboard() {
+    try {
+        const res = await fetch("/founder/dashboard");
+        if (!res.ok) throw new Error("Failed to fetch dashboard");
+        const data = await res.json();
+
+        // Metrics
+        document.getElementById("total-stock").textContent = data.metrics.total_stock;
+        document.getElementById("total-investment").textContent = data.metrics.total_investment.toFixed(2);
+        document.getElementById("projected-revenue").textContent = data.metrics.projected_revenue.toFixed(2);
+        document.getElementById("total-profit").textContent = data.metrics.total_profit.toFixed(2);
+
+        // Alerts
+        const fastDiv = document.getElementById("fast-moving");
+        fastDiv.innerHTML = "";
+        data.fast_moving.forEach(p => {
+            const span = document.createElement("span");
+            span.className = "alert fast";
+            span.textContent = `${p.name} → Sold: ${p.sold_qty}`;
+            fastDiv.appendChild(span);
+        });
+        const lowDiv = document.getElementById("low-stock");
+        lowDiv.innerHTML = "";
+        data.low_stock.forEach(p => {
+            const span = document.createElement("span");
+            span.className = "alert low";
+            span.textContent = `${p.name} → Qty: ${p.quantity}`;
+            lowDiv.appendChild(span);
+        });
+
+        // Products
+        const prodTable = document.getElementById("products-table");
+        prodTable.innerHTML = "";
+        data.products.forEach(p => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${p.id}</td><td>${p.name}</td><td>${p.category}</td><td>${p.cp.toFixed(2)}</td><td>${p.sp.toFixed(2)}</td><td>${p.quantity}</td>`;
+            prodTable.appendChild(tr);
+        });
+
+        // Sales
+        const salesTable = document.getElementById("sales-table");
+        salesTable.innerHTML = "";
+        data.sales.forEach(s => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${s.id}</td><td>${s.product_name}</td><td>${s.quantity}</td><td>${s.cp.toFixed(2)}</td><td>${s.sp.toFixed(2)}</td><td>${s.profit.toFixed(2)}</td><td>${s.staff_name}</td><td>${s.timestamp}</td>`;
+            salesTable.appendChild(tr);
+        });
+
+        // Staff
+        const staffTable = document.getElementById("staff-table");
+        staffTable.innerHTML = "";
+        data.staff.forEach(s => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${s.id}</td><td>${s.name}</td><td>${s.role}</td>`;
+            staffTable.appendChild(tr);
+        });
+
+        // System
+        const status = document.getElementById("system-status");
+        status.textContent = data.system_enabled ? "ACTIVE" : "INACTIVE";
+
+    } catch (err) {
+        console.error(err);
+        alert("Error loading dashboard. Check server.");
+    }
+}
+
+// System control
+async function toggleSystem(active) {
+    try {
+        const res = await fetch("/founder/system/toggle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ active })
+        });
+        if (!res.ok) throw new Error("Failed to toggle system");
+        const data = await res.json();
+        document.getElementById("system-status").textContent = data.system_enabled ? "ACTIVE" : "INACTIVE";
+    } catch(err) {
+        console.error(err);
+        alert("Failed to toggle system");
+    }
+}
+
+async function restartSystem() {
+    if (!confirm("Are you sure you want to RESTART the system?")) return;
+    try {
+        await fetch("/founder/system/restart", { method: "POST" });
+    } catch(err) { console.error(err); alert("Failed to restart system"); }
+}
+
+async function shutdownSystem() {
+    if (!confirm("Are you sure you want to SHUTDOWN the system?")) return;
+    try {
+        await fetch("/founder/system/shutdown", { method: "POST" });
+    } catch(err) { console.error(err); alert("Failed to shutdown system"); }
+}
+
+// Event listeners
+document.getElementById("toggle-on").addEventListener("click", () => toggleSystem(true));
+document.getElementById("toggle-off").addEventListener("click", () => toggleSystem(false));
+document.getElementById("restart").addEventListener("click", restartSystem);
+document.getElementById("shutdown").addEventListener("click", shutdownSystem);
+
+// Auto-refresh dashboard every 10 seconds
+fetchDashboard();
+setInterval(fetchDashboard, 10000);
+</script>
+</body>
+</html>

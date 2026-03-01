@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin Settings | Super Premium</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+:root{
+  --bg:#0a0f1e; --card:#1e2430; --accent:#facc15; --muted:#94a3b8; --danger:#ef4444; --text:#fff;
+}
+body.light{--bg:#f8fafc;--card:#fff;--accent:#f59e0b;--muted:#475569;--text:#0f172a;--danger:#dc2626;}
+body{margin:0;font-family:Inter,system-ui;background:var(--bg);color:var(--text);transition:all .3s;display:flex;min-height:100vh;}
+aside{width:260px;min-height:100vh;background:var(--card);padding:25px;position:fixed;top:0;left:0;z-index:10;}
+aside h2{color:var(--accent);margin-bottom:30px;font-size:22px;}
+nav a{display:block;color:var(--muted);text-decoration:none;padding:12px 10px;border-radius:8px;margin-bottom:6px;transition:.2s;}
+nav a:hover{background:rgba(250,204,21,0.15);color:var(--text);}
+main{flex:1;padding:30px;margin-left:260px;}
+header{padding:20px;text-align:center;background:var(--card);box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;justify-content:space-between;align-items:center;}
+header h1{ color:var(--accent); margin:0; }
+header button{margin-left:10px;padding:10px 16px;border:none;border-radius:6px;background:var(--accent);color:#022c22;cursor:pointer;font-weight:bold;transition:all .2s;}
+header button:hover{opacity:.85;}
+.container{max-width:1200px;margin:20px auto;padding:0 20px;}
+.card{background:var(--card);border-radius:14px;margin-bottom:20px;padding:20px;box-shadow:0 5px 15px rgba(0,0,0,.2);}
+.card h3{margin-top:0;color:var(--accent);}
+input,select,button{padding:10px 14px;margin:5px 0;border-radius:8px;border:1px solid var(--muted);background:var(--bg);color:var(--text);width:100%;}
+button.primary{background:var(--accent);color:#022c22;border:none;cursor:pointer;font-weight:bold;transition:all .2s;}
+button.primary:hover{opacity:.85;}
+table{width:100%;border-collapse:collapse;margin-top:15px;}
+th,td{padding:12px;text-align:left;}
+th{background:var(--bg);color:var(--muted);cursor:pointer;}
+tr{border-bottom:1px solid var(--muted);}
+tr:hover{background:rgba(250,204,21,0.1);}
+#toast{position:fixed;top:20px;right:20px;padding:16px 22px;background:var(--accent);color:#022c22;border-radius:8px;box-shadow:0 5px 15px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:all .5s;z-index:1000;}
+</style>
+</head>
+<body>
+
+<aside>
+  <h2>Admin Panel</h2>
+  <nav>
+    <a href="dashboard.html">📊 Dashboard</a>
+    <a href="products.html">📦 Products</a>
+    <a href="sales.html">💰 Sales</a>
+    <a href="record_sales.html">🧾 Record Sales</a>
+    <a href="staff.html">👥 Staff</a>
+    <a href="alerts.html">🚨 Alerts</a>
+    <a href="reports.html">📈 Reports</a>
+    <a href="settings.html" style="background:rgba(250,204,21,0.2); color:#fff;">⚙ Settings</a>
+  </nav>
+</aside>
+
+<main>
+<header>
+  <h1>⚙️ Admin Settings</h1>
+  <div>
+    <button onclick="toggleTheme()">🌗 Theme</button>
+    <button onclick="logout()">🚪 Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h3>🔒 Change Your Password</h3>
+    <input type="password" id="currentPassword" placeholder="Current password (optional)">
+    <input type="password" id="newPassword" placeholder="New password">
+    <button class="primary" onclick="changeAdminPassword()">Update Password</button>
+  </div>
+
+  <div class="card">
+    <h3>➕ Add New Staff</h3>
+    <input type="text" id="newStaffName" placeholder="Staff Name">
+    <input type="password" id="newStaffPassword" placeholder="Password">
+    <button class="primary" onclick="addStaff()">Add Staff</button>
+  </div>
+
+  <div class="card">
+    <h3>👥 Staff Management</h3>
+    <input type="search" id="staffSearch" placeholder="Search staff by name...">
+    <table>
+      <thead>
+        <tr>
+          <th onclick="sortTable('staffTable',0)">Name ▲▼</th>
+          <th onclick="sortTable('staffTable',1)">Role ▲▼</th>
+          <th>Reset Password</th>
+          <th>Force Password Change</th>
+          <th>Remove Staff</th>
+        </tr>
+      </thead>
+      <tbody id="staffTable">
+        <tr><td colspan="5" style="text-align:center;opacity:.6;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>⚠️ Clear All Activities</h3>
+    <p>This will permanently delete all sales, staff, products, inventory logs, and cannot be undone!</p>
+    <input type="password" id="adminResetPassword" placeholder="Enter your admin password">
+    <button class="primary" onclick="clearAllActivities()">Delete Everything</button>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ✅ DYNAMIC API BASE
+const API = `${window.location.protocol}//${window.location.host}/admin`;
+let staffData = [];
+let animatedRows = new Set();
+let lastAnimationTime = 0;
+const ANIMATION_INTERVAL = 5 * 60 * 1000;
+
+function showToast(msg,danger=false){
+  const t=document.getElementById("toast");
+  t.innerText=msg;
+  t.style.background=danger?"var(--danger)":"var(--accent)";
+  t.style.opacity=1;
+  setTimeout(()=>t.style.opacity=0,3000);
+}
+
+function toggleTheme(){
+  document.body.classList.toggle("light");
+  localStorage.setItem("theme", document.body.classList.contains("light")?"light":"dark");
+}
+if(localStorage.getItem("theme")==="light") document.body.classList.add("light");
+
+async function loadStaff(){
+  try{
+    const res = await fetch(`${API}/staff`, {credentials:"include"});
+    if(!res.ok){ showToast("Failed to load staff",true); return; }
+    staffData = await res.json();
+    renderStaff();
+  } catch(e){ showToast("Error loading staff",true); console.error(e);}
+}
+
+function renderStaff(){
+  const tbody = document.getElementById("staffTable");
+  const filter = document.getElementById("staffSearch").value.toLowerCase();
+  const items = staffData.filter(s => s.name.toLowerCase().includes(filter));
+  tbody.innerHTML = items.length ? "" : `<tr><td colspan="5" style="text-align:center;opacity:.6">No staff found</td></tr>`;
+  const now = Date.now();
+
+  items.forEach(s=>{
+    const trId = `staff-row-${s.id}`;
+    let tr = document.getElementById(trId);
+    if(!tr){
+      tr=document.createElement("tr");
+      tr.id = trId;
+      tr.innerHTML=`
+        <td>${s.name}</td>
+        <td>${s.role}</td>
+        <td><input type="password" placeholder="New password" id="pass-${s.id}"><button class="primary" onclick="resetStaffPassword(${s.id})">Reset</button></td>
+        <td><button class="primary" onclick="forcePasswordChange(${s.id})">Force</button></td>
+        <td><button class="primary" onclick="removeStaff(${s.id})">Remove</button></td>
+      `;
+      tbody.appendChild(tr);
+      if(now - lastAnimationTime > ANIMATION_INTERVAL){
+        gsap.from(tr,{y:20,opacity:0,duration:.5});
+      }
+      animatedRows.add(trId);
+    }
+  });
+
+  if(now - lastAnimationTime > ANIMATION_INTERVAL){
+    lastAnimationTime = now;
+  }
+}
+
+document.getElementById("staffSearch").addEventListener("input", renderStaff);
+
+function sortTable(tableId,colIndex){
+  const table=document.getElementById(tableId);
+  const rows=Array.from(table.querySelectorAll("tr")).filter(r=>r.querySelectorAll("td").length);
+  let asc=table.asc=!(table.asc);
+  rows.sort((a,b)=>{
+    let x=a.children[colIndex].innerText.toLowerCase();
+    let y=b.children[colIndex].innerText.toLowerCase();
+    return (x>y?1:x<y?-1:0)*(asc?1:-1);
+  });
+  rows.forEach(r=>table.appendChild(r));
+}
+
+async function changeAdminPassword(){
+  const current = document.getElementById("currentPassword").value.trim();
+  const newPass = document.getElementById("newPassword").value.trim();
+  if(!newPass){ showToast("New password is required", true); return; }
+  if(newPass.length < 6){ showToast("New password must be at least 6 characters", true); return; }
+  try{
+    const payload = current ? {current_password: current, new_password: newPass} : {new_password: newPass};
+    const res = await fetch(`${API}/change_password`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload),
+      credentials:"include"
+    });
+    const data = await res.json();
+    if(res.ok){ showToast(data.message); document.getElementById("currentPassword").value=""; document.getElementById("newPassword").value=""; }
+    else showToast(data.error || "Failed to update password", true);
+  } catch(e){ showToast("Error updating password", true); console.error(e);}
+}
+
+async function addStaff(){
+  const name = document.getElementById("newStaffName").value.trim();
+  const pass = document.getElementById("newStaffPassword").value.trim();
+  if(!name || !pass){ showToast("Name and password are required", true); return; }
+  if(pass.length < 6){ showToast("Password must be at least 6 characters", true); return; }
+  try{
+    const res = await fetch(`${API}/staff`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name, password: pass}),
+      credentials:"include"
+    });
+    const data = await res.json();
+    if(res.ok){ showToast(data.message); document.getElementById("newStaffName").value=""; document.getElementById("newStaffPassword").value=""; loadStaff(); }
+    else showToast(data.error || "Failed to add staff", true);
+  } catch(e){ showToast("Error adding staff", true); console.error(e);}
+}
+
+async function resetStaffPassword(staffId){
+  const input = document.getElementById(`pass-${staffId}`);
+  const newPass = input.value.trim();
+  if(!newPass){ showToast("Enter a new password", true); return; }
+  try{
+    const res = await fetch(`${API}/staff/${staffId}/reset_password`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({new_password:newPass}),
+      credentials:"include"
+    });
+    const data = await res.json();
+    if(res.ok){ showToast(data.message); input.value=""; }
+    else showToast(data.error || "Failed to reset password", true);
+  } catch(e){ showToast("Error resetting password", true); console.error(e);}
+}
+
+async function forcePasswordChange(staffId){
+  try{
+    const res = await fetch(`${API}/staff/${staffId}/force_change_password`,{
+      method:"POST",
+      credentials:"include"
+    });
+    const data = await res.json();
+    if(res.ok) showToast(data.message);
+    else showToast(data.error || "Failed to force password change", true);
+  } catch(e){ showToast("Error forcing password change", true); console.error(e);}
+}
+
+async function removeStaff(staffId){
+  if(!confirm("Are you sure you want to remove this staff?")) return;
+  try{
+    const res = await fetch(`${API}/staff/${staffId}`,{
+      method:"DELETE",
+      credentials:"include"
+    });
+    const data = await res.json();
+    if(res.ok){ showToast(data.message); loadStaff(); }
+    else showToast(data.error || "Failed to remove staff", true);
+  } catch(e){ showToast("Error removing staff", true); console.error(e);}
+}
+
+async function clearAllActivities(){
+  const password = document.getElementById("adminResetPassword").value.trim();
+  if(!password){ showToast("Admin password is required!", true); return; }
+  if(!confirm("Are you sure? This will permanently delete all data!")) return;
+  try{
+    const res = await fetch(`${API}/clear_all_activities`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({password}),
+      credentials:"include"
+    });
+    const data = await res.json();
+    if(res.ok){ showToast(data.message); document.getElementById("adminResetPassword").value=""; loadStaff(); }
+    else showToast(data.error || "Failed to clear activities", true);
+  } catch(e){ showToast("Error clearing activities", true); console.error(e);}
+}
+
+async function logout(){
+  try{ await fetch(`${API.replace("/admin","/auth")}/logout`,{credentials:"include"});}catch(e){console.error(e);}
+  window.location.href="../index.html";
+}
+
+// Live refresh every 10s, animation only every 5 minutes
+setInterval(loadStaff,10000);
+loadStaff();
+</script>
+
+</body>
+</html>

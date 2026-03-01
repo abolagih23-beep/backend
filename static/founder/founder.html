@@ -1,0 +1,139 @@
+# founder/founder.py
+from flask import Blueprint, request, jsonify
+from db import fetch_all, fetch_one, execute_query
+from utils import hash_password
+from datetime import datetime
+import os
+
+founder_bp = Blueprint("founder_bp", __name__)
+
+# --------------------------
+# SECRET KEY PROTECTION
+# --------------------------
+FOUNDER_KEY = os.getenv("FOUNDER_KEY", "superfoundersecret")  # must set in .env
+
+def founder_required():
+    """
+    Protect founder routes with a secret key.
+    Expected header: Founder-Key
+    """
+    key = request.headers.get("Founder-Key")
+    if key != FOUNDER_KEY:
+        return jsonify({"error": "Unauthorized"}), 401
+    return None
+
+# --------------------------
+# VIEW ALL ACTIVITIES
+# --------------------------
+@founder_bp.route("/activities", methods=["GET"])
+def all_activities():
+    guard = founder_required()
+    if guard:
+        return guard
+
+    # Fetch all sales, staff actions, password changes
+    sales = fetch_all("""
+        SELECT s.id, p.name AS product_name, s.quantity, s.staff_id,
+               COALESCE(u.name,'Admin') AS staff_name,
+               ((p.sp - p.cp) * s.quantity) AS profit,
+               s.timestamp
+        FROM sales s
+        JOIN products p ON s.product_id = p.id
+        LEFT JOIN users u ON s.staff_id = u.id
+        ORDER BY s.timestamp DESC
+    """)
+
+    password_logs = fetch_all("""
+        SELECT id, user_id, old_password, changed_at
+        FROM founder_password_logs
+        ORDER BY changed_at DESC
+    """)
+
+    return jsonify({
+        "sales": sales,
+        "password_changes": password_logs
+    })
+
+
+# --------------------------
+# CHANGE ADMIN/STAFF PASSWORD
+# --------------------------
+@founder_bp.route("/users/<int:user_id>/password", methods=["PUT"])
+def change_user_password(user_id):
+    guard = founder_required()
+    if guard:
+        return guard
+
+    data = request.json or {}
+    new_password = data.get("password","").strip()
+    if not new_password:
+        return jsonify({"error":"Password required"}), 400
+
+    # Fetch old password hash for logging
+    user = fetch_one("SELECT password, name FROM users WHERE id=%s", (user_id,))
+    if not user:
+        return jsonify({"error":"User not found"}), 404
+
+    old_password_hash = user["password"]
+    hashed = hash_password(new_password)
+
+    # Update password
+    execute_query("UPDATE users SET password=%s WHERE id=%s", (hashed, user_id))
+
+    # Log change
+    execute_query("""
+        INSERT INTO founder_password_logs (user_id, old_password, changed_at)
+        VALUES (%s, %s, CURRENT_TIMESTAMP)
+    """, (user_id, old_password_hash))
+
+    return jsonify({"status":"success","message":f"Password changed for {user['name']}"})
+
+
+# --------------------------
+# SHOW STOCK CHANGES HISTORY
+# --------------------------
+@founder_bp.route("/stock/history", methods=["GET"])
+def stock_history():
+    guard = founder_required()
+    if guard:
+        return guard
+
+    # Assuming a purchases table records stock updates
+    history = fetch_all("""
+        SELECT p.id AS product_id, p.name AS product_name,
+               pu.quantity AS added_quantity, pu.cp AS cost_price,
+               pu.timestamp
+        FROM purchases pu
+        JOIN products p ON pu.product_id = p.id
+        ORDER BY pu.timestamp DESC
+    """)
+    return jsonify(history)
+
+
+# --------------------------
+# SHUTDOWN SYSTEM
+# --------------------------
+@founder_bp.route("/shutdown", methods=["POST"])
+def shutdown_system():
+    guard = founder_required()
+    if guard:
+        return guard
+
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        return jsonify({"error": "Server shutdown not available"}), 500
+    func()
+    return jsonify({"status":"success","message":"System shutting down..."})
+
+# --------------------------
+# INIT TABLE FOR PASSWORD LOGS
+# --------------------------
+def create_founder_tables():
+    execute_query("""
+    CREATE TABLE IF NOT EXISTS founder_password_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES users(id),
+        old_password VARCHAR(255),
+        changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
