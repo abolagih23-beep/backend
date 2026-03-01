@@ -1,3 +1,4 @@
+import os
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 
@@ -14,7 +15,7 @@ from dashboard_routes import dashboard_bp  # NEW: Dashboard for Total Investment
 # Initialize Flask App
 # -------------------------
 app = Flask(__name__, static_folder="static")
-app.secret_key = "supersecretkey"  # session secret key
+app.secret_key = os.environ.get("SECRET_KEY", "supersecretkey")  # use env var in production
 
 # Enable CORS with credentials so frontend can send cookies
 CORS(app, supports_credentials=True)
@@ -63,5 +64,6 @@ def home():
 # Run Flask App
 # -------------------------
 if __name__ == "__main__":
-    # Use host='0.0.0.0' for LAN access if needed
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_ENV", "production") != "production"
+    app.run(host="0.0.0.0", port=port, debug=debug)
